@@ -361,3 +361,17 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/Assets/Editor Default Resources/Firebase
+/Assets/ExternalDependencyManager/Editor
+/Assets/Firebase/Editor/AnalyticsDependencies.xml
+/Assets/Firebase
+/Assets/PlayingCardsSprites/Playing Cards
+/Assets/Plugins
+/Assets/Scenes
+/Assets/Prefab
+/Assets/TextMesh Pro
+/Library
+/ProjectSettings
+/Temp
+/UserSettings
+/wIREFRAMES-Sorto.pptx
