@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
+using UnityEngine.SceneManagement;
 public enum CardType : byte
 {
     CHARACTER,
@@ -19,13 +19,14 @@ public class CardManager : MonoBehaviour
 {
     public static CardManager instance;
 
-    public Dictionary<int, CardData> card_datas = new Dictionary<int, CardData>();
-    public Dictionary<int, Sprite> card_sprites = new Dictionary<int, Sprite>();
-    public Dictionary<int, Sprite> card_back_sprites = new Dictionary<int, Sprite>();
+    public List<CardData> card_datas = new List<CardData>();
+    public List<Sprite> card_sprites = new List<Sprite>();
+    public List<Sprite> card_back_sprites = new List<Sprite>();
 
     public void Start()
     {
         instance = this;
+        DontDestroyOnLoad(transform);
     }
 
     public Card GetCard(int i)
@@ -65,7 +66,7 @@ public class CardManager : MonoBehaviour
     }
 }
 
-[SerializeField]
+[System.Serializable]
 public class CardData
 {
     public int attack;

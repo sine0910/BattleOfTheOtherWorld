@@ -14,13 +14,14 @@ public enum PROTOCOL : byte
     TURN_END = 4, //C -> S
     TURN_RESULT = 5, //S -> C
 
-    FINAL_RESULT = 6 //S -> C
+    FINAL_RESULT = 6, //S -> C
 }
 
-public enum REQ_TYPE : byte
+public enum START : byte
 {
-    CARD,
-    CHANGE
+    FIRST,
+    START,
+    RESTART,
 }
 
 public class GameManager : MonoBehaviour
@@ -31,8 +32,6 @@ public class GameManager : MonoBehaviour
     public GameEngine engine;
 
     public float game_time = 60f;
-
-    bool is_first;
 
     private void Start()
     {
@@ -84,6 +83,7 @@ public class GameManager : MonoBehaviour
                 return false;
             }
         }
+
         ClearReceivedProtocol();
         return true;
     }
@@ -110,21 +110,36 @@ public class GameManager : MonoBehaviour
                 {
                     Debug.Log("READY_TO_START");
 
-                    if (is_first)
-                    {
-                        List<int> player_card_list = new List<int>();
-                        for (int i = 0; i < msg.Count; i++)
-                        {
-                            player_card_list.Add(Convert.ToInt32(PopAt(msg)));
-                        }
-                        engine.GetPlayerCardList(player_index, player_card_list);
-                    }
+                    START start = (START)Convert.ToByte(PopAt(msg));
 
-                    if (IsAllReceived(PROTOCOL.READY_TO_START))
+                    switch (start)
                     {
-                        is_first = false;
+                        case START.FIRST:
+                            {
+                                //처음 시작할 때 플레이어는 자신이 갖고있는 모든 카드 정보를 서버로 보내준다.
+                                List<int> player_card_list = new List<int>();
+                                for (int i = 0; i < msg.Count; i++)
+                                {
+                                    player_card_list.Add(Convert.ToInt32(PopAt(msg)));
+                                }
+                                //받은 카드 정보를 적용
+                                engine.GetPlayerCardList(player_index, player_card_list);
 
-                        GameStart();
+                                if (IsAllReceived(PROTOCOL.READY_TO_START))
+                                {
+                                    GameStart();
+                                }
+                            }
+                            break;
+
+                        case START.START:
+                            {
+                                if (IsAllReceived(PROTOCOL.READY_TO_START))
+                                {
+                                    GameStart();
+                                }
+                            }
+                            break;
                     }
                 }
                 break;
@@ -132,34 +147,19 @@ public class GameManager : MonoBehaviour
             case PROTOCOL.PLAYER_REQ:
                 {
                     Debug.Log("PLAYER_ACK");
-                    REQ_TYPE t = (REQ_TYPE)Convert.ToByte(PopAt(msg));
 
-                    switch (t)
-                    {
-                        case REQ_TYPE.CARD:
-                            {
-                                //플레이어가 카드를 내었을 때
-                                //플레이어의 핸드 카드에서 -> 센터 카드로 이동
-                                int card_index = Convert.ToInt32(PopAt(msg));
+                    //플레이어가 카드를 내었을 때
+                    //플레이어의 핸드 카드에서 -> 센터 카드로 이동
+                    int card_index = Convert.ToInt32(PopAt(msg));
 
-                                engine.SetToCenter(player_index, card_index);
+                    engine.SetToCenter(player_index, card_index);
 
-                                SetToCenterACK(player_index, card_index);
-                            }
-                            break;
+                    //플레이어가 카드를 공격 또는 방어로 변환했을 때
+                    //카드의 스테이터스를 공격 또는 방어로 변환
+                    CardStatus change_status = (CardStatus)Convert.ToInt32(PopAt(msg));
+                    engine.SetCardStatus(player_index, card_index, change_status);
 
-                        case REQ_TYPE.CHANGE:
-                            {
-                                //플레이어가 카드를 공격 또는 방어로 변환했을 때
-                                //카드의 스테이터스를 공격 또는 방어로 변환
-                                int card_index = Convert.ToInt32(PopAt(msg));
-                                CardStatus change_status = (CardStatus)Convert.ToInt32(PopAt(msg));
-                                engine.SetCardStatus(player_index, card_index, change_status);
-
-                                SetChangeACK(player_index, card_index);
-                            }
-                            break;
-                    }
+                    SetToCenterACK(player_index, card_index, change_status);
                 }
                 break;
 
@@ -170,7 +170,22 @@ public class GameManager : MonoBehaviour
                     {
                         //플레이어들의 최종 전투 포인트를 합산하여 비교
                         engine.GetPlayerBattlePoint();
-                        //전투 포인트가 높은 플레이어를 승리
+
+                        engine.AddToUsedCard();
+
+                        if (engine.IsEnd())
+                        {
+                            //전투 포인트가 높은 플레이어를 승리
+                            byte win_player = engine.GetWinner();
+
+                            GameEnd(win_player);
+
+                            engine.Init();
+                        }
+                        else
+                        {
+                            GameTurnEnd();
+                        }
                     }
                 }
                 break;
@@ -196,7 +211,7 @@ public class GameManager : MonoBehaviour
             //플레이어 인덱스
             msg.Add(i.ToString());
 
-            //카드 3장의 정보를 추가한다.
+            //카드의 정보를 추가한다.
             for (int k = 0; k < engine.players[i].player_hand_cards.Count; k++)
             {
                 msg.Add(engine.players[i].player_hand_cards[k].card_index.ToString());
@@ -206,22 +221,23 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void SetToCenterACK(byte player_index, int card_index)
+    void SetToCenterACK(byte player_index, int card_index, CardStatus change_status)
     {
         for (int i = 0; i < engine.players.Count; i++)
         {
             List<string> msg = new List<string>();
             msg.Add(((short)PROTOCOL.PLAYER_REQ).ToString());
 
-            msg.Add(((short)REQ_TYPE.CARD).ToString());
-
             msg.Add(player_index.ToString());
             msg.Add(card_index.ToString());
+
+            msg.Add(((short)change_status).ToString());
 
             Send(i, msg);
         }
     }
 
+    //사용안함
     void SetChangeACK(byte player_index, int card_index)
     {
         for (int i = 0; i < engine.players.Count; i++)
@@ -229,8 +245,6 @@ public class GameManager : MonoBehaviour
             List<string> msg = new List<string>();
             msg.Add(((short)PROTOCOL.PLAYER_REQ).ToString());
 
-            msg.Add(((short)REQ_TYPE.CARD).ToString());
-
             msg.Add(player_index.ToString());
             msg.Add(card_index.ToString());
 
@@ -238,6 +252,35 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    void GameTurnEnd()
+    {
+        for (int i = 0; i < engine.players.Count; i++)
+        {
+            List<string> msg = new List<string>();
+            msg.Add(((short)PROTOCOL.TURN_RESULT).ToString());
+
+            msg.Add(0.ToString());
+            msg.Add(engine.players[0].score.ToString());
+
+            msg.Add(1.ToString());
+            msg.Add(engine.players[1].score.ToString());
+
+            Send(i, msg);
+        }
+    }
+
+    void GameEnd(byte winner)
+    {
+        for (int i = 0; i < engine.players.Count; i++)
+        {
+            List<string> msg = new List<string>();
+            msg.Add(((short)PROTOCOL.FINAL_RESULT).ToString());
+
+            msg.Add(winner.ToString());
+
+            Send(i, msg);
+        }
+    }
 
     void Send(int i, List<string> msg)
     {
