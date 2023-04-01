@@ -14,6 +14,7 @@ public class FirebaseManager : MonoBehaviour
     public static FirebaseManager instance;
 
     public DatabaseReference db_ref;
+    FirebaseUser user;
 
     public delegate void Callback(byte success);
 
@@ -57,8 +58,8 @@ public class FirebaseManager : MonoBehaviour
                 return;
             }
 
-            FirebaseUser newUser = task.Result;
-            Debug.LogFormat("User signed in successfully: {0} ({1})", newUser.DisplayName, newUser.UserId);
+            user = task.Result;
+            Debug.LogFormat("User signed in successfully: {0} ({1})", user.DisplayName, user.UserId);
         });
     }
 
@@ -67,9 +68,17 @@ public class FirebaseManager : MonoBehaviour
         DataManager.instance.SaveAccountData(e);
 
         UserData data = new UserData(n, e, p, 1200);
-        string json = JsonUtility.ToJson(data);
 
-        db_ref.Child("Users").Child(e).SetRawJsonValueAsync(json).ContinueWithOnMainThread(t => 
+        DataManager.instance.user_data = data;
+
+        Dictionary<string, object> childUpdates = new Dictionary<string, object>();
+        childUpdates["/Users/" + e + "/username"] = data.username;
+        childUpdates["/Users/" + e + "/email"] = data.email;
+        childUpdates["/Users/" + e + "/password"] = data.password;
+        childUpdates["/Users/" + e + "/battle_point"] = data.battle_point;
+        childUpdates["/Users/" + e + "/card_list"] = data.card_list;
+
+        db_ref.UpdateChildrenAsync(childUpdates).ContinueWithOnMainThread(t => 
         {
             if (t.IsFaulted)
             {
@@ -90,9 +99,18 @@ public class FirebaseManager : MonoBehaviour
         DataManager.instance.SaveAccountData(key);
 
         UserData data = new UserData("user_" + key.Substring(1, key.Length < 4 ? key.Length : 4), key, "", 1200);
-        string json = JsonUtility.ToJson(data);
 
-        db_ref.Child("Users").Child(key).SetRawJsonValueAsync(json).ContinueWithOnMainThread(t =>
+        DataManager.instance.user_data = data;
+
+        Dictionary<string, object> childUpdates = new Dictionary<string, object>();
+        childUpdates["/Users/" + key + "/username"] = data.username;
+        childUpdates["/Users/" + key + "/email"] = data.email;
+        childUpdates["/Users/" + key + "/password"] = data.password;
+        childUpdates["/Users/" + key + "/battle_point"] = data.battle_point;
+        childUpdates["/Users/" + key + "/card_list"] = data.card_list;
+
+
+        db_ref.UpdateChildrenAsync(childUpdates).ContinueWithOnMainThread(t =>
         {
             if (t.IsFaulted)
             {
@@ -129,13 +147,15 @@ public class FirebaseManager : MonoBehaviour
                     if (snapshot.HasChild("card_list"))
                     {
                         List<int> l = new List<int>();
-                        foreach (object obj in snapshot.Child("card_list").Children)
+                        foreach (DataSnapshot obj in snapshot.Child("card_list").Children)
                         {
-                            l.Add(Convert.ToInt32(obj));
+                            l.Add(Convert.ToInt32(obj.Value));
                         }
+
                         data.card_list = l;
                     }
 
+                    DataManager.instance.SaveAccountData(e);
                     DataManager.instance.ApplyUserData(data);
 
                     c(0);
@@ -183,11 +203,16 @@ public class FirebaseManager : MonoBehaviour
 
     public void SaveData(Callback c)
     {
-        string json = JsonUtility.ToJson(DataManager.instance.user_data);
+        Dictionary<string, object> childUpdates = new Dictionary<string, object>();
+        childUpdates["/Users/" + DataManager.instance.user_data.email + "/username"] = DataManager.instance.user_data.username;
+        childUpdates["/Users/" + DataManager.instance.user_data.email + "/email"] = DataManager.instance.user_data.email;
+        childUpdates["/Users/" + DataManager.instance.user_data.email + "/password"] = DataManager.instance.user_data.password;
+        childUpdates["/Users/" + DataManager.instance.user_data.email + "/battle_point"] = DataManager.instance.user_data.battle_point;
+        childUpdates["/Users/" + DataManager.instance.user_data.email + "/card_list"] = DataManager.instance.user_data.card_list;
 
         if (c != null)
         {
-            db_ref.Child("Users").Child(DataManager.instance.user_data.email).SetRawJsonValueAsync(json).ContinueWithOnMainThread(t =>
+            db_ref.UpdateChildrenAsync(childUpdates).ContinueWithOnMainThread(t =>
             {
                 if (t.IsFaulted)
                 {
@@ -201,7 +226,7 @@ public class FirebaseManager : MonoBehaviour
         }
         else
         {
-            db_ref.Child("Users").Child(DataManager.instance.user_data.email).SetRawJsonValueAsync(json);
+            db_ref.UpdateChildrenAsync(childUpdates);
         }
     }
 
@@ -243,6 +268,10 @@ public class FirebaseManager : MonoBehaviour
                 {
                     c(Convert.ToInt64(snapshot.Child("freebox").Value));
                 }
+                else
+                {
+                    c(0);
+                }
             }
         });
     }
@@ -276,11 +305,14 @@ public class FirebaseManager : MonoBehaviour
 
                 if (snapshot.Exists)
                 {
-                    MultiManager.instance.is_host = true;
-                    MultiManager.instance.root = snapshot.Child("email").Value.ToString();
-                    MultiManager.instance.other_user_name = snapshot.Child("username").Value.ToString();
+                    foreach (DataSnapshot data in snapshot.Children)
+                    {
+                        MultiManager.instance.is_host = true;
+                        MultiManager.instance.root = data.Child("email").Value.ToString();
+                        MultiManager.instance.other_user_name = data.Child("username").Value.ToString();
 
-                    db_ref.Child("Match").Child(MultiManager.instance.root).Child("msg").SetValueAsync("2/" + DataManager.instance.user_data.username);
+                        c(0);
+                    }
                 }
             }
         });
@@ -313,8 +345,8 @@ public class FirebaseManager : MonoBehaviour
 
                     foreach (DataSnapshot data in snapshot.Children)
                     {
-                        result[0].Add(snapshot.Child("username").Value.ToString());
-                        result[1].Add(snapshot.Child("battle_point").Value.ToString());
+                        result[0].Add(data.Child("username").Value.ToString());
+                        result[1].Add(data.Child("battle_point").Value.ToString());
                     }
                 }
 
@@ -323,15 +355,15 @@ public class FirebaseManager : MonoBehaviour
         });
     }
 
-    public void StartGame(Callback c)
+    public void StartGame()
     {
-        MultiManager.instance.InitData(); 
+        MultiManager.instance.InitData();
 
-        FirebaseDatabase.DefaultInstance.GetReference("Match").OrderByChild("Time").LimitToFirst(1).GetValueAsync().ContinueWithOnMainThread(t =>
+        FirebaseDatabase.DefaultInstance.GetReference("Match").OrderByChild("time").StartAt(1).LimitToFirst(1).GetValueAsync().ContinueWithOnMainThread(t =>
         {
             if (t.IsFaulted)
             {
-                c(1);
+
             }
             else if (t.IsCompleted)
             {
@@ -342,15 +374,18 @@ public class FirebaseManager : MonoBehaviour
                     //먼저 대전 신청을 한 사람이 있을 경우 그 사람 방으로 입장
                     if (snapshot.Exists)
                     {
-                        db_ref.Child("Match").Child(snapshot.Child("root").Value.ToString()).Child("Time").RemoveValueAsync();
+                        foreach (DataSnapshot data in snapshot.Children)
+                        {
+                            MultiManager.instance.is_host = false;
+                            MultiManager.instance.root = data.Child("email").Value.ToString();
+                            MultiManager.instance.other_user_name = data.Child("user_name").Value.ToString();
 
-                        MultiManager.instance.is_host = false;
-                        MultiManager.instance.root = snapshot.Child("root").Value.ToString();
-                        MultiManager.instance.other_user_name = snapshot.Child("user_name").Value.ToString();
+                            db_ref.Child("Match").Child(MultiManager.instance.root).Child("time").RemoveValueAsync();
 
-                        ListenMatchStatus();
+                            db_ref.Child("Match").Child(MultiManager.instance.root).Child("msg").SetValueAsync("1/" + DataManager.instance.user_data.username);
 
-                        db_ref.Child("Match").Child(MultiManager.instance.root).Child("msg").SetValueAsync("1/" + DataManager.instance.user_data.username);
+                            ListenMatchStatus();
+                        }
                     }
                     else//대전 신청한 사람이 없는 경우 자신이 호스트로 방을 생성한다.
                     {
@@ -363,18 +398,30 @@ public class FirebaseManager : MonoBehaviour
 
     public void MakeGameRoom()
     {
-        string json = JsonUtility.ToJson(new Match(GetUnixTimeStamp(), DataManager.instance.user_data.email, DataManager.instance.user_data.username));
-
         MultiManager.instance.is_host = true;
         MultiManager.instance.root = DataManager.instance.user_data.email;
 
-        db_ref.Child("Match").Child(MultiManager.instance.root).SetRawJsonValueAsync(json);
+        Dictionary<string, object> childUpdates = new Dictionary<string, object>();
+        childUpdates["Match/" + MultiManager.instance.root + "/time"] = GetUnixTimeStamp();
+        childUpdates["Match/" + MultiManager.instance.root + "/email"] = DataManager.instance.user_data.email;
+        childUpdates["Match/" + MultiManager.instance.root + "/user_name"] = DataManager.instance.user_data.username;
+        childUpdates["Match/" + MultiManager.instance.root + "/msg"] = "";
+
+        db_ref.UpdateChildrenAsync(childUpdates);
 
         ListenMatchStatus();
     }
 
+    public void CloseGameRoom()
+    {
+        db_ref.Child("Match").Child(MultiManager.instance.root).RemoveValueAsync();
+
+        MultiManager.instance.InitData();
+    }
+
     public void ListenMatchStatus()
     {
+        Debug.Log("ListenMatchStatus root => " + MultiManager.instance.root);
         db_ref.Child("Match").Child(MultiManager.instance.root).Child("msg").ValueChanged += GetValueChangedForMatch;
     }
 
@@ -382,52 +429,41 @@ public class FirebaseManager : MonoBehaviour
     {
         if (args.DatabaseError != null)
         {
-            if (args.Snapshot.Exists)
+            return;
+        }
+
+        if (args.Snapshot.Exists)
+        {
+            string value = args.Snapshot.Value.ToString();
+            List<string> msg = value.Split(new string[] { "/" }, StringSplitOptions.None).ToList();
+
+            if (msg[0] == "1" && MultiManager.instance.is_host)
             {
-                string value = args.Snapshot.Value.ToString();
-                List<string> msg = value.Split(new string[] { "/" }, StringSplitOptions.None).ToList();
+                MultiManager.instance.other_user_name = msg[1];
 
-                if (msg[0] == "1")
+                db_ref.Child("Match").Child(MultiManager.instance.root).Child("msg").SetValueAsync("3");
+            }
+            else if (msg[0] == "2")
+            {
+                MultiManager.instance.other_user_name = msg[1];
+                HomeManager.instance.RecieveInvite();
+            }
+            else if (msg[0] == "3")
+            {
+                //
+                if (MultiManager.instance.is_host)
                 {
-                    MultiManager.instance.other_user_name = msg[1];
-
-                    db_ref.Child("Match").Child(MultiManager.instance.root).Child("msg").SetValueAsync("3");
+                    db_ref.Child("Match").Child(MultiManager.instance.root).RemoveValueAsync();
                 }
-                else if (msg[0] == "2")
-                {
-                    MultiManager.instance.other_user_name = msg[1];
-                    HomeManager.instance.RecieveInvite();
-                }
-                else if(msg[0] == "3")
-                {
-                    //
-                    MultiManager.instance.MoveGameScene();
-                }
+                CancleMatch();
+                MultiManager.instance.MoveGameScene();
             }
         }
     }
 
     public void CancleMatch()
     {
-        MultiManager.instance.InitData();
-
         db_ref.Child("Match").Child(MultiManager.instance.root).Child("msg").ValueChanged -= GetValueChangedForMatch;
-    }
-
-    class Match
-    {
-        public double time;
-        public string root;
-        public string user_name;
-        public string msg;
-
-        public Match(double t, string r, string u, string m = "")
-        {
-            time = t;
-            root = r;
-            user_name = u;
-            msg = m;
-        }
     }
 
     public static long GetUnixTimeStamp()

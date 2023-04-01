@@ -37,7 +37,7 @@ public class StartManager : MonoBehaviour
 
     private void Start()
     {
-        if (DataManager.instance.user_data.email != "")
+        if (DataManager.instance.user_data.email != null && DataManager.instance.user_data.email != "")
         {
             FirebaseManager.instance.AutoLogin(Callback);
         }
@@ -86,10 +86,10 @@ public class StartManager : MonoBehaviour
             string email = emailInput.text;
             string pass = passwordInput.text;
 
-            if (user_name.Length > 0 && email.Length > 0 && pass.Length > 0)
+            if (user_name.Length > 0 && email.Length > 0 && email.Contains(".com") && pass.Length > 0)
             {
                 is_can_act = false;
-
+                email = email.Replace(".com", "");
                 FirebaseManager.instance.CreateAccount(user_name, email, pass, Callback);
             }
         }
@@ -120,10 +120,11 @@ public class StartManager : MonoBehaviour
         string email = login_emailInput.text;
         string pass = login_passwordInput.text;
 
-        if (email.Length > 0 && pass.Length > 0)
+        if (email.Length > 0 && email.Contains(".com") && pass.Length > 0)
         {
             is_can_act = false;
 
+            email = email.Replace(".com", "");
             FirebaseManager.instance.Login(email, pass, Callback);
         }
     }
@@ -222,8 +223,9 @@ public class StartManager : MonoBehaviour
 
         string email = find_emailInput.text;
 
-        if (email.Length > 0)
+        if (email.Length > 0 && email.Contains(".com"))
         {
+            email = email.Replace(".com", "");
             FirebaseManager.instance.GetPassword(email, GetPw);
         }
     }

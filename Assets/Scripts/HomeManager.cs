@@ -3,9 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using Unity.Services.Core;
+using Unity.Services.Core.Environments;
 using UnityEngine.Purchasing;
 using UnityEngine.Purchasing.Extension;
 using UnityEngine.Purchasing.Security;
+
 using System;
 
 public class HomeManager : MonoBehaviour, IStoreListener
@@ -36,18 +39,31 @@ public class HomeManager : MonoBehaviour, IStoreListener
     public GameObject rank_slot;
     public List<RankSlot> rank_slot_pool = new List<RankSlot>();
 
-    bool is_working = false;
+    public bool is_working = false;
 
-    void Start()
+    public string environment = "production";
+
+    async void Start()
     {
         instance = this;
 
-        var module = StandardPurchasingModule.Instance();
-        var builder = ConfigurationBuilder.Instance(module);
+        try
+        {
+            var options = new InitializationOptions().SetEnvironmentName(environment);
 
-        builder.AddProduct("SupplyBox", ProductType.Consumable, new IDs { { "SupplyBox", GooglePlay.Name , AppleAppStore.Name } });
+            await UnityServices.InitializeAsync(options);
 
-        UnityPurchasing.Initialize(this, builder);
+            var module = StandardPurchasingModule.Instance();
+            var builder = ConfigurationBuilder.Instance(module);
+
+            builder.AddProduct("SupplyBox", ProductType.Consumable, new IDs { { "SupplyBox", GooglePlay.Name, AppleAppStore.Name } });
+
+            UnityPurchasing.Initialize(this, builder);
+        }
+        catch (Exception exception)
+        {
+            // An error occurred during services initialization.
+        }
     }
 
     #region Collection
@@ -136,7 +152,9 @@ public class HomeManager : MonoBehaviour, IStoreListener
 
     public void OpenFreeSupplyBoxes()
     {
-        if (is_working && Is_aleady_opened)
+        Debug.Log("OpenFreeSupplyBoxes");
+
+        if (is_working || Is_aleady_opened)
         {
             return;
         }
@@ -150,6 +168,9 @@ public class HomeManager : MonoBehaviour, IStoreListener
     {
         if (r == 0)
         {
+            free_sb_text.text = "Already Opened\nSupply Box";
+            Is_aleady_opened = true;
+
             OpenSupplyBox();
         }
 
@@ -158,6 +179,7 @@ public class HomeManager : MonoBehaviour, IStoreListener
 
     public void BuySupplyBoxes()
     {
+        Debug.Log("BuySupplyBoxes");
         controller.InitiatePurchase("SupplyBox");
     }
 
@@ -169,16 +191,14 @@ public class HomeManager : MonoBehaviour, IStoreListener
         {
             int r = UnityEngine.Random.Range(0, CardManager.instance.card_datas.Count);
 
-            if (!cards.Contains(r))
+            cards.Add(r);
+
+            if (!DataManager.instance.user_data.card_list.Contains(r))
             {
-                cards.Add(r);
-                if (!DataManager.instance.user_data.card_list.Contains(r))
-                {
-                    DataManager.instance.user_data.card_list.Add(r);
-                }
-                break;
+                DataManager.instance.user_data.card_list.Add(r);
             }
         }
+        DataManager.instance.SaveUserData();
 
         StartCoroutine(GachaManager.instance.OnGacha(cards));
     }
@@ -248,7 +268,7 @@ public class HomeManager : MonoBehaviour, IStoreListener
 
         if (validPurchase)
         {
-
+            OpenSupplyBox();
         }
         else
         {
@@ -263,8 +283,6 @@ public class HomeManager : MonoBehaviour, IStoreListener
     public void ShowFriendPage()
     {
         is_working = true;
-
-        MultiManager.instance.InitData();
 
         Friend.SetActive(true);
         inviteButton.gameObject.SetActive(true);
@@ -294,9 +312,11 @@ public class HomeManager : MonoBehaviour, IStoreListener
             return;
         }
 
-        if (friendId.text != "")
+        if (friendId.text != "" && friendId.text != DataManager.instance.user_data.username)
         {
             is_working = true;
+
+            MultiManager.instance.InitData();
             FirebaseManager.instance.InviteFriend(friendId.text, InviteFriendResult);
         }
     }
@@ -304,6 +324,12 @@ public class HomeManager : MonoBehaviour, IStoreListener
     public void InviteFriendResult(byte r)
     {
         is_working = false;
+
+        if (r == 0)
+        {
+            ListeningStart();
+            FirebaseManager.instance.db_ref.Child("Match").Child(MultiManager.instance.root).Child("msg").SetValueAsync("2/" + DataManager.instance.user_data.username);
+        }
     }
 
     public void RecieveInvite()
@@ -321,6 +347,11 @@ public class HomeManager : MonoBehaviour, IStoreListener
 
     public void ListeningStart()
     {
+        if (play)
+        {
+            ListeningCancle();
+        }
+
         MultiManager.instance.root = DataManager.instance.user_data.email;
         FirebaseManager.instance.ListenMatchStatus();
     }
@@ -343,10 +374,12 @@ public class HomeManager : MonoBehaviour, IStoreListener
 
     void SetRank(Dictionary<byte, List<string>> r)
     {
+        is_working = false;
+
         if (r.Count != 0)
         {
             int k = 0;
-            for (int i = r.Count; i > 0; i--)
+            for (int i = r[0].Count; i > 0; i--)
             {
                 if (rank_slot_pool.Count > k)
                 {
@@ -359,17 +392,15 @@ public class HomeManager : MonoBehaviour, IStoreListener
                 }
 
                 bool is_me = false;
-                if (DataManager.instance.user_data.username == r[0][i])
+                if (DataManager.instance.user_data.username == r[0][i - 1])
                 {
                     is_me = true;
                 }
 
-                rank_slot_pool[k].Init(is_me, i, r[0][i], r[1][i]);
+                rank_slot_pool[k].Init(is_me, i, r[0][i - 1], r[1][i - 1]);
                 k++;
             }
         }
-
-        is_working = false;
     }
 
     public void CloseRanking()
@@ -387,4 +418,25 @@ public class HomeManager : MonoBehaviour, IStoreListener
         Leaderboard.SetActive(false);
     }
     #endregion
+
+
+    bool play = false;
+    public void GameStart()
+    {
+        if (play && MultiManager.instance.is_host)
+        {
+            FirebaseManager.instance.CloseGameRoom();
+        }
+
+        play = true;
+        FirebaseManager.instance.StartGame();
+    }
+
+    public void OnDestroy()
+    {
+        if (play && MultiManager.instance.is_host)
+        {
+            FirebaseManager.instance.CloseGameRoom();
+        }
+    }
 }

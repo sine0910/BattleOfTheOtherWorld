@@ -15,8 +15,8 @@ public class RankSlot : MonoBehaviour
     {
         if (is_me)
         {
-            image.color = Color.cyan;
-            rect.sizeDelta = new Vector2(1600, 85);
+            image.color = Color.blue;
+            rect.sizeDelta = new Vector2(1600, 70);
         }
         else
         {

@@ -61,18 +61,20 @@ public class MultiManager : MonoBehaviour
     {
         if (args.DatabaseError != null)
         {
-            if (args.Snapshot.Exists)
-            {
-                string value = args.Snapshot.Value.ToString();
+            return;
+        }
 
-                List<string> msg = value.Split(new string[] { "/" }, StringSplitOptions.None).ToList();
+        if (args.Snapshot.Exists)
+        {
+            string value = args.Snapshot.Value.ToString();
 
-                byte player_index = Convert.ToByte(PopAtLast(msg));
+            List<string> msg = value.Split(new string[] { "/" }, StringSplitOptions.None).ToList();
 
-                SendManager.ReceiveServer(player_index, msg);
+            byte player_index = Convert.ToByte(PopAtLast(msg));
 
-                return;
-            }
+            SendManager.ReceiveServer(player_index, msg);
+
+            return;
         }
     }
 
@@ -80,16 +82,18 @@ public class MultiManager : MonoBehaviour
     {
         if (args.DatabaseError != null)
         {
-            if (args.Snapshot.Exists)
-            {
-                string value = args.Snapshot.Value.ToString();
+            return;
+        }
 
-                List<string> msg = value.Split(new string[] { "/" }, StringSplitOptions.None).ToList();
+        if (args.Snapshot.Exists)
+        {
+            string value = args.Snapshot.Value.ToString();
 
-                SendManager.ReceiveClient(msg);
+            List<string> msg = value.Split(new string[] { "/" }, StringSplitOptions.None).ToList();
 
-                return;
-            }
+            SendManager.ReceiveClient(msg);
+
+            return;
         }
     }
 

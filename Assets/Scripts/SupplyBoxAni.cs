@@ -6,7 +6,7 @@ using UnityEngine.UI;
 public class SupplyBoxAni : MonoBehaviour
 {
     public List<Transform> card_slots = new List<Transform>();
-    public List<GameObject> cards = new List<GameObject>();
+    public List<Image> cards = new List<Image>();
 
     public IEnumerator ShowGacha(List<int> card_results)
     {
@@ -18,7 +18,7 @@ public class SupplyBoxAni : MonoBehaviour
         for (int i = 0; i < card_results.Count; i++)
         {
             cards[i].gameObject.SetActive(true);
-            cards[i].GetComponent<Image>().sprite = CardManager.instance.GetCardSprites(card_results[i]);
+            cards[i].sprite = CardManager.instance.GetCardSprites(card_results[i]);
 
             cards[i].transform.position = new Vector3(card_slots[i].position.x, card_slots[i].position.y);
 

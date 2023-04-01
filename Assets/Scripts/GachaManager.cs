@@ -7,6 +7,7 @@ public class GachaManager : MonoBehaviour
     public static GachaManager instance;
 
     public SupplyBoxAni sba;
+    public GameObject sba_obj;
 
     public bool t = false;
 
@@ -20,12 +21,12 @@ public class GachaManager : MonoBehaviour
     public IEnumerator OnGacha(List<int> r)
     {
         t = false;
-        sba.gameObject.SetActive(true);
+        sba_obj.SetActive(true);
         yield return StartCoroutine(sba.ShowGacha(r));
 
         t = false;
         yield return new WaitUntil(() => t);
-        sba.gameObject.SetActive(false);
+        sba_obj.SetActive(false);
     }
 
     public void Click()

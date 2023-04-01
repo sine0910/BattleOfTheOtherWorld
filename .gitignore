@@ -379,3 +379,7 @@ FodyWeavers.xsd
 /Assets/StreamingAssets
 /Assets/GoogleService-Info.plist
 /Assets/google-services.json
+/Assets/Auto Letterbox/Demos
+/Assets/Auto Letterbox/Documentation
+/Assets/Samples/In App Purchasing/4.7.0/06 Initialize Unity Gaming Services
+/BattleOfTheOtherWorld_BackUpThisFolder_ButDontShipItWithYourGame
